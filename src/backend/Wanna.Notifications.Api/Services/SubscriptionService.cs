@@ -5,6 +5,7 @@ using Wanna.Notifications.Api.Models;
 public class SubscriptionService : ISubscriptionService
 {
     private readonly ConcurrentDictionary<Guid, Subscription> _subscriptions = new();
+    private readonly object _stateLock = new();
 
     public Subscription Subscribe(string email, string eventName)
     {
@@ -17,7 +18,12 @@ public class SubscriptionService : ISubscriptionService
     {
         if (_subscriptions.TryGetValue(id, out var sub))
         {
-            sub.IsActive = false;
+            lock (_stateLock)
+            {
+                if (!sub.IsActive)
+                    return false;
+                sub.IsActive = false;
+            }
             return true;
         }
         return false;
@@ -33,13 +39,16 @@ public class SubscriptionService : ISubscriptionService
 
     public NotificationResult TriggerEvent(string eventName)
     {
-        var subs = _subscriptions.Values
-            .Where(s => s.IsActive && s.EventName.Equals(eventName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        List<Subscription> subs;
+        lock (_stateLock)
+        {
+            subs = _subscriptions.Values
+                .Where(s => s.IsActive && s.EventName.Equals(eventName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-        // Mark as notified (deactivate one-time subscriptions)
-        foreach (var sub in subs)
-            sub.IsActive = false;
+            foreach (var sub in subs)
+                sub.IsActive = false;
+        }
 
         return new NotificationResult
         {

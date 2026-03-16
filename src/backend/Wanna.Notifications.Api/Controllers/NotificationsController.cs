@@ -17,6 +17,9 @@ public class NotificationsController : ControllerBase
     [HttpPost("trigger/{eventName}")]
     public IActionResult TriggerEvent(string eventName)
     {
+        if (string.IsNullOrWhiteSpace(eventName))
+            return BadRequest("eventName must not be empty.");
+
         var result = _service.TriggerEvent(eventName);
         return Ok(result);
     }
