@@ -5,7 +5,6 @@ using Wanna.Notifications.Api.Models;
 public class SubscriptionService : ISubscriptionService
 {
     private readonly ConcurrentDictionary<Guid, Subscription> _subscriptions = new();
-    private readonly object _stateLock = new();
 
     public Subscription Subscribe(string email, string eventName)
     {
@@ -16,22 +15,12 @@ public class SubscriptionService : ISubscriptionService
 
     public bool Unsubscribe(Guid id)
     {
-        if (_subscriptions.TryGetValue(id, out var sub))
-        {
-            lock (_stateLock)
-            {
-                if (!sub.IsActive)
-                    return false;
-                sub.IsActive = false;
-            }
-            return true;
-        }
-        return false;
+        return _subscriptions.TryRemove(id, out _);
     }
 
     public IReadOnlyList<Subscription> GetAll(string? eventName = null)
     {
-        var query = _subscriptions.Values.Where(s => s.IsActive);
+        IEnumerable<Subscription> query = _subscriptions.Values;
         if (eventName is not null)
             query = query.Where(s => s.EventName.Equals(eventName, StringComparison.OrdinalIgnoreCase));
         return query.ToList();
@@ -39,22 +28,25 @@ public class SubscriptionService : ISubscriptionService
 
     public NotificationResult TriggerEvent(string eventName)
     {
-        List<Subscription> subs;
-        lock (_stateLock)
-        {
-            subs = _subscriptions.Values
-                .Where(s => s.IsActive && s.EventName.Equals(eventName, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+        var notifiedAt = DateTime.UtcNow;
+        var notified = new List<Subscription>();
 
-            foreach (var sub in subs)
-                sub.IsActive = false;
+        foreach (var key in _subscriptions.Keys.ToList())
+        {
+            if (_subscriptions.TryGetValue(key, out var sub)
+                && sub.EventName.Equals(eventName, StringComparison.OrdinalIgnoreCase)
+                && _subscriptions.TryRemove(key, out _))
+            {
+                sub.NotifiedAt = notifiedAt;
+                notified.Add(sub);
+            }
         }
 
         return new NotificationResult
         {
             EventName = eventName,
-            NotifiedCount = subs.Count,
-            NotifiedEmails = subs.Select(s => s.Email).ToList()
+            NotifiedCount = notified.Count,
+            NotifiedEmails = notified.Select(s => s.Email).ToList()
         };
     }
 }

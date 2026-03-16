@@ -13,7 +13,7 @@ public class SubscriptionServiceTests
         Assert.NotEqual(Guid.Empty, sub.Id);
         Assert.Equal("user@example.com", sub.Email);
         Assert.Equal("product-restock", sub.EventName);
-        Assert.True(sub.IsActive);
+        Assert.Null(sub.NotifiedAt);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class SubscriptionServiceTests
     }
 
     [Fact]
-    public void TriggerEvent_NotifiesActiveSubscribers_AndDeactivatesThem()
+    public void TriggerEvent_NotifiesActiveSubscribers_AndRemovesThem()
     {
         _service.Subscribe("a@test.com", "restock");
         _service.Subscribe("b@test.com", "restock");
@@ -65,7 +65,7 @@ public class SubscriptionServiceTests
         Assert.Contains("a@test.com", result.NotifiedEmails);
         Assert.Contains("b@test.com", result.NotifiedEmails);
         
-        // Subscribers should be deactivated after notification
+        // Subscribers should be removed after notification
         Assert.Empty(_service.GetAll("restock"));
     }
 
